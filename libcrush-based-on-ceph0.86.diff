@@ -1,0 +1,89 @@
+diff --git a/src/crush/CrushWrapper.h b/src/crush/CrushWrapper.h
+index 2d1fa95..2ebf387 100644
+--- a/src/crush/CrushWrapper.h
++++ b/src/crush/CrushWrapper.h
+@@ -55,9 +55,9 @@ public:
+   std::map<int32_t, string> type_map; /* bucket/device type names */
+   std::map<int32_t, string> name_map; /* bucket/device names */
+   std::map<int32_t, string> rule_name_map;
++  struct crush_map *crush;
+ 
+ private:
+-  struct crush_map *crush;
+   /* reverse maps */
+   bool have_rmaps;
+   std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
+diff --git a/src/include/rados/librados.h b/src/include/rados/librados.h
+index 3c90ca4..ebb40d6 100644
+--- a/src/include/rados/librados.h
++++ b/src/include/rados/librados.h
+@@ -529,6 +529,9 @@ int rados_cluster_fsid(rados_t cluster, char *buf, size_t len);
+  */
+ int rados_wait_for_latest_osdmap(rados_t cluster);
+ 
++const void* rados_get_crushmap(rados_t cluster);
++void rados_put_crushmap(rados_t cluster);
++
+ /**
+  * @defgroup librados_h_pools Pools
+  *
+diff --git a/src/librados/RadosClient.cc b/src/librados/RadosClient.cc
+index 6aeba57..23eb639 100644
+--- a/src/librados/RadosClient.cc
++++ b/src/librados/RadosClient.cc
+@@ -463,6 +463,19 @@ int librados::RadosClient::wait_for_latest_osdmap()
+   return 0;
+ }
+ 
++const void* librados::RadosClient::get_crushmap()
++{
++  int ret = wait_for_osdmap();
++  if (ret < 0)
++    return NULL;
++  return objecter->get_osdmap_read()->crush->crush;
++}
++
++void librados::RadosClient::put_crushmap()
++{
++  objecter->put_osdmap_read();
++}
++
+ int librados::RadosClient::pool_list(std::list<std::string>& v)
+ {
+   int r = wait_for_osdmap();
+diff --git a/src/librados/RadosClient.h b/src/librados/RadosClient.h
+index 9a394b3..584b513 100755
+--- a/src/librados/RadosClient.h
++++ b/src/librados/RadosClient.h
+@@ -85,6 +85,8 @@ public:
+   uint64_t get_instance_id();
+ 
+   int wait_for_latest_osdmap();
++  const void* get_crushmap();
++  void put_crushmap();
+ 
+   int create_ioctx(const char *name, IoCtxImpl **io);
+ 
+diff --git a/src/librados/librados.cc b/src/librados/librados.cc
+index 45bde1a..39f42ab 100644
+--- a/src/librados/librados.cc
++++ b/src/librados/librados.cc
+@@ -2129,6 +2129,18 @@ extern "C" int rados_wait_for_latest_osdmap(rados_t cluster)
+   return retval;
+ }
+ 
++extern "C" const void* rados_get_crushmap(rados_t cluster)
++{
++  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
++  return radosp->get_crushmap();
++}
++
++extern "C" void rados_put_crushmap(rados_t cluster)
++{
++  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
++  radosp->put_crushmap();
++}
++
+ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
+ {
+   tracepoint(librados, rados_pool_list_enter, cluster, len);
