@@ -5,6 +5,7 @@
  * Robert Jenkins' function for mixing 32-bit values
  * http://burtleburtle.net/bob/hash/evahash.html
  * a, b = random bits, c = input and output
+ * http://www.chasanc.com/old/hashing_func.htm
  */
 #define crush_hashmix(a, b, c) do {     \
     a = a-b;  a = a-c;  a = a^(c>>13);  \

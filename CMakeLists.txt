@@ -4,12 +4,12 @@ project (libcrush)
 set(CMAKE_BUILD_TYPE Release)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-set (crush_SRCS hash.c mapper.c crush.c client.c)
+set (crush_SRCS hash.c mapper.c crush.c client.cc)
 
 add_library(crush SHARED ${crush_SRCS})
 target_link_libraries(crush rados)
 
-add_executable(example example.c ${crush_SRCS})
+add_executable(example example.cc ${crush_SRCS})
 target_link_libraries(example rados)
 
 set(CMAKE_CXX_COMPILER "g++")

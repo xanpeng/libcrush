@@ -13,77 +13,119 @@ index 2d1fa95..2ebf387 100644
    /* reverse maps */
    bool have_rmaps;
    std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
-diff --git a/src/include/rados/librados.h b/src/include/rados/librados.h
-index 3c90ca4..ebb40d6 100644
---- a/src/include/rados/librados.h
-+++ b/src/include/rados/librados.h
-@@ -529,6 +529,9 @@ int rados_cluster_fsid(rados_t cluster, char *buf, size_t len);
-  */
- int rados_wait_for_latest_osdmap(rados_t cluster);
+diff --git a/src/include/rados/librados.hpp b/src/include/rados/librados.hpp
+index e6e40b2..e8e2009 100644
+--- a/src/include/rados/librados.hpp
++++ b/src/include/rados/librados.hpp
+@@ -14,6 +14,10 @@
+ #include "librados.h"
+ #include "rados_types.hpp"
  
-+const void* rados_get_crushmap(rados_t cluster);
-+void rados_put_crushmap(rados_t cluster);
-+
- /**
-  * @defgroup librados_h_pools Pools
-  *
-diff --git a/src/librados/RadosClient.cc b/src/librados/RadosClient.cc
-index 6aeba57..23eb639 100644
---- a/src/librados/RadosClient.cc
-+++ b/src/librados/RadosClient.cc
-@@ -463,6 +463,19 @@ int librados::RadosClient::wait_for_latest_osdmap()
-   return 0;
- }
- 
-+const void* librados::RadosClient::get_crushmap()
-+{
-+  int ret = wait_for_osdmap();
-+  if (ret < 0)
-+    return NULL;
-+  return objecter->get_osdmap_read()->crush->crush;
++extern "C" {
++#include "crush/crush.h"
 +}
 +
-+void librados::RadosClient::put_crushmap()
-+{
-+  objecter->put_osdmap_read();
-+}
-+
- int librados::RadosClient::pool_list(std::list<std::string>& v)
+ namespace libradosstriper
  {
-   int r = wait_for_osdmap();
+   class RadosStriper;
+@@ -936,6 +940,9 @@ namespace librados
+ 
+     /// get/wait for the most recent osdmap
+     int wait_for_latest_osdmap();
++    const struct crush_map* get_crushmap();
++    void put_crushmap();
++    std::vector<__u32> get_osd_weights();
+ 
+     /*
+      * pool aio
 diff --git a/src/librados/RadosClient.h b/src/librados/RadosClient.h
-index 9a394b3..584b513 100755
+index 9a394b3..3459c87 100755
 --- a/src/librados/RadosClient.h
 +++ b/src/librados/RadosClient.h
-@@ -85,6 +85,8 @@ public:
+@@ -59,7 +59,6 @@ private:
+   bool ms_handle_reset(Connection *con);
+   void ms_handle_remote_reset(Connection *con);
+ 
+-  Objecter *objecter;
+ 
+   Mutex lock;
+   Cond cond;
+@@ -71,7 +70,6 @@ private:
+   void *log_cb_arg;
+   string log_watch;
+ 
+-  int wait_for_osdmap();
+ 
+ public:
+   Finisher finisher;
+@@ -85,6 +83,7 @@ public:
    uint64_t get_instance_id();
  
    int wait_for_latest_osdmap();
-+  const void* get_crushmap();
-+  void put_crushmap();
++  int wait_for_osdmap();
  
    int create_ioctx(const char *name, IoCtxImpl **io);
  
+@@ -109,6 +108,7 @@ public:
+   // watch/notify
+   uint64_t max_watch_notify_cookie;
+   map<uint64_t, librados::WatchNotifyInfo *> watch_notify_info;
++  Objecter *objecter;
+ 
+   void register_watch_notify_callback(librados::WatchNotifyInfo *wc,
+ 				      uint64_t *cookie);
 diff --git a/src/librados/librados.cc b/src/librados/librados.cc
-index 45bde1a..39f42ab 100644
+index 45bde1a..9067a0c 100644
 --- a/src/librados/librados.cc
 +++ b/src/librados/librados.cc
-@@ -2129,6 +2129,18 @@ extern "C" int rados_wait_for_latest_osdmap(rados_t cluster)
-   return retval;
+@@ -1779,6 +1779,30 @@ int librados::Rados::wait_for_latest_osdmap()
+   return client->wait_for_latest_osdmap();
  }
  
-+extern "C" const void* rados_get_crushmap(rados_t cluster)
++const struct crush_map* librados::Rados::get_crushmap()
 +{
-+  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
-+  return radosp->get_crushmap();
++  int ret = client->wait_for_osdmap();
++  if (ret < 0)
++    return NULL;
++  return client->objecter->get_osdmap_read()->crush->crush;
 +}
 +
-+extern "C" void rados_put_crushmap(rados_t cluster)
++void librados::Rados::put_crushmap()
 +{
-+  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
-+  radosp->put_crushmap();
++  client->objecter->put_osdmap_read();
 +}
 +
- extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
++std::vector<__u32> librados::Rados::get_osd_weights()
++{
++  std::vector<__u32> weights;
++  int ret = client->wait_for_osdmap();
++  if (ret < 0)
++    return weights;
++  weights = client->objecter->get_osdmap_read()->osd_weight;
++  client->objecter->put_osdmap_read();
++  return weights;
++}
++
+ librados::PoolAsyncCompletion *librados::Rados::pool_async_create_completion()
  {
-   tracepoint(librados, rados_pool_list_enter, cluster, len);
+   PoolAsyncCompletionImpl *c = new PoolAsyncCompletionImpl;
+diff --git a/src/osd/OSDMap.h b/src/osd/OSDMap.h
+index aafadb6..56cd379 100644
+--- a/src/osd/OSDMap.h
++++ b/src/osd/OSDMap.h
+@@ -220,7 +220,6 @@ private:
+   };
+   ceph::shared_ptr<addrs_s> osd_addrs;
+ 
+-  vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
+   vector<osd_info_t> osd_info;
+   ceph::shared_ptr< map<pg_t,vector<int32_t> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
+   ceph::shared_ptr< map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
+@@ -242,6 +241,7 @@ private:
+ 
+  public:
+   ceph::shared_ptr<CrushWrapper> crush;       // hierarchical map
++  vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
+ 
+   friend class OSDMonitor;
+   friend class PGMonitor;
