@@ -14,7 +14,7 @@ target_link_libraries(example rados)
 
 set(CMAKE_CXX_COMPILER "g++")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0")
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -finline-limit=1000 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "-g -O0 -finline-limit=1000")
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR})
 
 string(TOUPPER ${CMAKE_BUILD_TYPE} BUILD_TYPE)

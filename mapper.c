@@ -1,11 +1,11 @@
-# include <string.h>
-# include <stdio.h>
-# include <stdlib.h>
-# include <assert.h>
-# define BUG_ON(x) assert(!(x))
-# define dprintk(args...) printf(args)
-# define kmalloc(x, f) malloc(x)
-# define kfree(x) free(x)
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#define BUG_ON(x) assert(!(x))
+#define dprintk(args...) fprintf(stderr, args)
+#define kmalloc(x, f) malloc(x)
+#define kfree(x) free(x)
 
 #include "crush.h"
 #include "hash.h"
