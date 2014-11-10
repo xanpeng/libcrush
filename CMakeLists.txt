@@ -9,12 +9,14 @@ set (crush_SRCS hash.c mapper.c crush.c client.cc)
 add_library(crush SHARED ${crush_SRCS})
 target_link_libraries(crush rados)
 
-add_executable(example example.cc ${crush_SRCS})
-target_link_libraries(example rados)
+add_executable(example-simple example-simple.cc ${crush_SRCS})
+target_link_libraries(example-simple rados)
+add_executable(example-crush-tester example-crush-tester.cc ${crush_SRCS})
+target_link_libraries(example-crush-tester crush rados)
 
 set(CMAKE_CXX_COMPILER "g++")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0")
-set(CMAKE_CXX_FLAGS_RELEASE "-g -O0 -finline-limit=1000")
+set(CMAKE_CXX_FLAGS_RELEASE "-g -O0 -finline-limit=1000 --std=c++11")
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR})
 
 string(TOUPPER ${CMAKE_BUILD_TYPE} BUILD_TYPE)
